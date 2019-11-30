@@ -1,0 +1,3 @@
+Asthma Attack|Cough|Shortness of Breath|Congestion|Anxiety|Chest Pressure
+Common Cold|Runny Nose|Sore Throat|Cough|Congestion
+Flu|Fever|Sore Throat|Cough|Runny Nose|Headache|Fatigue|Body Aches|Chills|Congestion
