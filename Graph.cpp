@@ -1,5 +1,6 @@
 #include "Graph.hpp"
 #include <iostream>
+#include <iomanip>
 #include <fstream>
 #include <sstream>
 #include <string>
@@ -61,11 +62,16 @@ void Graph::loadConditions(string filename)
   if(conditionsFile.is_open())
   {
     string dataLine;
-    string conditionName;
+    string conditionName, complicationName;
     while(getline(conditionsFile, dataLine)) //Reads each line for each condition
     {
-      stringstream(dataLine);
+      stringstream stream(dataLine);
       getline(stream, conditionName,'|'); //Gets condition name
+      conditions.push_back(conditionName); //Update conditions vector
+      while(getline(stream, complicationName, '|')) //Update complication with conidtions thatm ust be satisfied
+      {
+        addCondition(complicationName, conditionName);
+      }
     }
   }
   else
@@ -152,12 +158,11 @@ void Graph::addCondition(string complication, string condition)
     if(vertices[i]->name == complication)
     {
       complicationVertex = vertices[i];
-      complicationVertex->condition = condition;
+      complicationVertex->conditions.push_back(condition);
       return;
     }
   }
 }
-
 
 /*
 * Name: displaySymptomsWithComplications
@@ -180,7 +185,7 @@ void Graph::displaySymptomsWithComplications()
 }
 
 /*
-* Name: displayComplicationsWithSymptoms
+* Name: displaySymptomsWithComplications
 * Functionality: Prints each complication in the graph along with its adjacent symptoms
 **/
 void Graph::displayComplicationsWithSymptoms()
@@ -195,6 +200,49 @@ void Graph::displayComplicationsWithSymptoms()
         cout << vertices[i]->adj[j].vector->name << " | ";
       }
       cout << endl;
+    }
+  }
+}
+
+/*
+* Name: displayComplicationsWithSymptoms
+* Functionality: Prints each complication in the graph along with its adjacent symptoms and respectable conditions
+**/
+void Graph::displayComplicationsWithSymptomsAndConditions()
+{
+  for(int i = 0; i < vertices.size(); i++)
+  {
+    if(vertices[i]->complication == true)
+    {
+      cout << vertices[i]->name << endl << "  Symptoms: ";
+      for(int j = 0; j < vertices[i]->adj.size(); j++)
+      {
+        if(j != vertices[i]->adj.size() - 1)
+        {
+          cout << vertices[i]->adj[j].vector->name << ", ";
+        }
+        else
+        {
+          cout << vertices[i]->adj[j].vector->name;
+        }
+      }
+      cout << endl;
+      if(vertices[i]->conditions.size() != 0)
+      {
+        cout << "  Conditions: ";
+        for(int j = 0; j < vertices[i]->conditions.size(); j++)
+        {
+          if(j != vertices[i]->conditions.size() - 1)
+          {
+            cout << vertices[i]->conditions[j] << ", ";
+          }
+          else
+          {
+            cout << vertices[i]->conditions[j];
+          }
+        }
+        cout << endl;
+      }
     }
   }
 }
@@ -222,11 +270,66 @@ void Graph::displaySymptoms()
 {
   for(int i = 0; i < vertices.size(); i++)
   {
-    if(vertices[i]->complication == false)
+    if(i != vertices.size() - 1 && vertices[i]->complication == false)
     {
-      cout << vertices[i]->name << endl;
+      cout << vertices[i]->name << ", ";
+    }
+    else if(vertices[i]->complication == false)
+    {
+      cout << vertices[i]->name;
     }
   }
+}
+
+/*
+* Name: displayConditions
+* Functionality: Prints all conditions in vector
+**/
+void Graph::displayConditions()
+{
+  for(int i = 0; i < conditions.size(); i++)
+  {
+    if(i != conditions.size() - 1)
+    {
+      cout << conditions[i] << ", ";
+    }
+    else
+    {
+      cout << conditions[i];
+    }
+  }
+}
+
+/*
+* Name: checkCondition
+* Functionality: Checks if the patient is entering a condition that has been preloaded
+**/
+bool Graph::checkCondition(string condition)
+{
+  for(int i = 0; i < conditions.size(); i++)
+  {
+    if(conditions[i] == condition)
+    {
+      return true;
+    }
+  }
+  return false;
+}
+
+/*
+* Name: checkSymptom
+* Functionality: Checks if the patient is entering a symptom that has been preloaded
+**/
+bool Graph::checkSymptom(string symptom)
+{
+  for(int i = 0; i < vertices.size(); i++)
+  {
+    if(vertices[i]->name == symptom)
+    {
+      return true;
+    }
+  }
+  return false;
 }
 
 /*
@@ -238,6 +341,7 @@ void Graph::displaySymptoms()
 void Graph::updateBestMatch(string symptom)
 {
   vertex* symptomVertex;
+  vector<vertex*> newBestMatch;
   //Search for symptom vertice
   for(int i = 0; i < vertices.size(); i++)
   {
@@ -246,48 +350,105 @@ void Graph::updateBestMatch(string symptom)
       symptomVertex = vertices[i];
     }
   }
-  //if bestMatch is empty
-  if(bestMatch.size() == 0)
+  //Add points to all adjacent vertices
+  for(int i = 0; i < symptomVertex->adj.size(); i++)
   {
-    for(int i = 0; i < symptomVertex->adj.size(); i++)
+    symptomVertex->adj[i].vector->points++;
+  }
+  //Place any vertice with points into bestMatch vector
+  for(int i = 0; i < vertices.size(); i++)
+  {
+    if(vertices[i]->points != 0)
     {
-      bestMatch.push_back(symptomVertex->adj[i].vector);
+      newBestMatch.push_back(vertices[i]);
     }
   }
-  //if bestMatch is not empty, we will remove vectors to further focus on a complication
-  else
+  bestMatch = newBestMatch;
+}
+
+/*
+* Name: removeConditionsFromBestMatch
+* Functionality: Takes in patient's conditions and removes them from bestMatch vector if they don't match up
+** - Ex: Can't have asthma attack if you don't have asthma
+**/
+void Graph::removeConditionsFromBestMatch(vector<string> patientConditions)
+{
+  bool match = false;
+  for(int i = 0; i < bestMatch.size(); i++) //Look at each bestMatch vector
   {
-    for(int i = 0; i < bestMatch.size(); i++)
+    //Compare the condition vectors between the patient's medical history and what each bestMatch might contain
+    for(int j = 0; j < bestMatch[i]->conditions.size(); j++)
     {
-      for(int j = 0; j < symptomVertex->adj.size(); j++)
+      for(int k = 0; k < patientConditions.size(); k++)
       {
-        if(j == (symptomVertex->adj.size() - 1) && symptomVertex->adj[j].vector->name != bestMatch[i]->name)
+        if(patientConditions[k] == bestMatch[i]->conditions[j]) //A match means we do NOT want to remove complications associate with it
         {
-          bestMatch.erase(bestMatch.begin() + i - 1);
-          i = 0; //Reset
+          match = true;
         }
       }
     }
+    if(match == false && bestMatch[i]->conditions.size() != 0) //Remove the complication if the patient doesn't have medical history with it
+    {
+      bestMatch[i]->points = 0; //Remove any points given to the vector
+      bestMatch.erase(bestMatch.begin() + i); //Remove it from vector
+      i = 0; //Reset to check
+    }
+    match = false;
   }
 }
 
 /*
-* Name: printBestMatchFunction
-* Functionality: Prints the current bestMatch vector
+* Name: printBestMatch
+* Functionality: Prints the current bestMatch vector in descending order
+** - Totals points as to how popular a complication is per symptom input
 **/
 void Graph::printBestMatch()
 {
+  double percentage, total = 0;
+  vertex* temp;
+  bool doneSorting = true;
+  bool done = false;
+  //Total all the points
   for(int i = 0; i < bestMatch.size(); i++)
   {
-    cout << bestMatch[i]->name << endl;
+    total = total + bestMatch[i]->points;
+  }
+  //Sort bestMatch vector
+  while(done == false)
+  {
+    for(int i = 0; i < bestMatch.size() - 1; i++)
+    {
+      if(bestMatch[i]->points < bestMatch[i+1]->points) //Swap to get descending order
+      {
+        temp = bestMatch[i+1];
+        bestMatch[i+1] = bestMatch[i];
+        bestMatch[i] = temp;
+        doneSorting = false;
+      }
+    }
+    if(doneSorting == true) //No sorts were made, so we are done!
+    {
+      done = true;
+    }
+    doneSorting = true; //Reset check
+  }
+  //Print top complications
+  for(int i = 0; i < bestMatch.size(); i++)
+  {
+    percentage = bestMatch[i]->points / total;
+    cout << bestMatch[i]->name << " (" << setprecision(4) << percentage*100 << "% likely)" << endl;
   }
 }
 
 /*
 * Name: refreshBestMatch
-* Functionality: Deletes entire vector
+* Functionality: Deletes entire vector and resets points to all indices
 **/
 void Graph::refreshBestMatch()
 {
+  for(int i = 0; i < bestMatch.size(); i++)
+  {
+    bestMatch[i]->points = 0;
+  }
   bestMatch.clear();
 }
